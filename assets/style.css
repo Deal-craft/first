@@ -1,3 +1,24 @@
 .aaaa{
     width: 100%;
 }
+.add_user_bottom{
+   
+    width: 85%;
+    height: 15%;
+    border-radius: 20px;
+    margin: 10% 10%;
+    
+}
+.search_bar_user{
+    position: relative;
+    top: 6px;
+    
+
+}
+.search_bar_users{
+    width: 20px;
+    height: 50px;
+    padding-top: 10%;
+    margin-top: 1%;
+    position: relative;
+}
