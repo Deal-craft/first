@@ -19,6 +19,8 @@
     width: 20px;
     height: 50px;
     padding-top: 10%;
-    margin-top: 1%;
     position: relative;
+}
+table.highlight > tbody > tr:hover {
+  background-color: rgba(150, 95, 196, 0.5);
 }
