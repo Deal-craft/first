@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Space Battle Chess - نبرد شطرنج فضایی</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&family=Orbitron:wght@600;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body, html { width: 100%; height: 100%; overflow: hidden; background: #020308; font-family: 'Vazirmatn', 'Orbitron', sans-serif; color: #f8fafc; }
+  #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+  #labels-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+
+  .piece-hud {
+    position: absolute; transform: translate(-50%, -100%);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: opacity 0.15s; pointer-events: none;
+  }
+  .piece-lvl {
+    font-size: 0.66rem; font-weight: 900; padding: 1px 6px; border-radius: 5px;
+    background: rgba(6, 10, 24, 0.9); border: 1px solid rgba(255,255,255,0.3);
+    text-shadow: 0 1px 3px #000; white-space: nowrap;
+  }
+  .piece-hp-bg {
+    width: 48px; height: 6px; background: rgba(0,0,0,0.85);
+    border-radius: 4px; border: 1px solid rgba(255,255,255,0.35); overflow: hidden;
+  }
+  .piece-hp-fill { height: 100%; transition: width 0.15s ease-out; }
+
+  .dmg-popup {
+    position: absolute; transform: translate(-50%, -50%);
+    font-weight: 900; font-size: 1.5rem; color: #ff2a55;
+    text-shadow: 0 0 12px #ff0033, 0 2px 4px #000;
+    pointer-events: none; animation: floatUp 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    z-index: 20;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translate(-50%, -20%) scale(0.6); }
+    25% { transform: translate(-50%, -70%) scale(1.25); }
+    100% { opacity: 0; transform: translate(-50%, -150%) scale(0.95); }
+  }
+
+  #ui-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 14px 20px;
+  }
+
+  .top-bar { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; width: 100%; }
+
+  .glass-panel {
+    background: rgba(8, 13, 30, 0.82); backdrop-filter: blur(14px);
+    border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 14px;
+    padding: 12px 16px; box-shadow: 0 10px 32px rgba(0, 0, 0, 0.7), inset 0 0 18px rgba(56, 189, 248, 0.08);
+    pointer-events: auto;
+  }
+
+  .title-box h1 {
+    font-size: 1.18rem; font-weight: 900;
+    background: linear-gradient(90deg, #38bdf8, #c084fc, #f43f5e);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 4px;
+  }
+
+  .turn-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 800; padding: 4px 11px; border-radius: 8px; background: rgba(255,255,255,0.07); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.white { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+  .dot.black { background: #f43f5e; box-shadow: 0 0 10px #f43f5e; }
+
+  #combat-hud {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(12, 8, 26, 0.92); border: 2px solid rgba(244, 63, 94, 0.75);
+    padding: 10px 20px; border-radius: 16px;
+    box-shadow: 0 0 35px rgba(244, 63, 94, 0.4);
+    opacity: 0; pointer-events: none; transition: all 0.2s; z-index: 15;
+  }
+  #combat-hud.show { opacity: 1; transform: translateX(-50%) scale(1.02); }
+  .fighter-card { display: flex; flex-direction: column; min-width: 145px; }
+  .fighter-name { font-size: 0.85rem; font-weight: 900; color: #f8fafc; display: flex; justify-content: space-between; gap: 8px; }
+  .fighter-hp-bar { width: 100%; height: 11px; background: #1e1b2e; border-radius: 6px; overflow: hidden; margin-top: 4px; border: 1px solid rgba(255,255,255,0.25); position: relative; }
+  .fighter-hp- trail { height: 100%; background: #fff; position: absolute; top: 0; left: 0; transition: width 0.35s ease; }
+  .fighter-hp-inner { height: 100%; position: relative; transition: width 0.1s ease-out; z-index: 2; }
+  .vs-badge { font-weight: 900; font-size: 1.15rem; color: #fbbf24; text-shadow: 0 0 12px #f59e0b; }
+
+  .controls-card { max-width: 350px; font-size: 0.78rem; line-height: 1.65; color: #cbd5e1; }
+  .key {
+    display: inline-block; background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #38bdf8; color: #38bdf8;
+    border-radius: 5px; padding: 0px 6px; font-weight: 800; font-size: 0.73rem; margin: 0 2px;
+  }
+
+  #toast-msg {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95); border: 2px solid #38bdf8;
+    padding: 9px 24px; border-radius: 999px; font-weight: 900; font-size: 0.96rem;
+    box-shadow: 0 0 28px rgba(56, 189, 248, 0.5);
+    opacity: 0; transition: all 0.2s ease; pointer-events: none; white-space: nowrap; z-index: 15;
+  }
+  #toast-msg.show { opacity: 1; transform: translateX(-50%) translateY(5px); }
+  #toast-msg.error { border-color: #f43f5e; color: #fda4af; box-shadow: 0 0 28px rgba(244, 63, 94, 0.65); }
+  #toast-msg.combat { border-color: #fbbf24; color: #fde68a; box-shadow: 0 0 32px rgba(251, 191, 36, 0.7); }
+
+  #helmet-overlay {
+    position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    opacity: 0; transition: opacity 0.3s ease;
+    background: radial-gradient(circle at center, transparent 52%, rgba(2, 6, 23, 0.88) 92%),
+                linear-gradient(180deg, rgba(56,189,248,0.12) 0%, transparent 20%, transparent 80%, rgba(56,189,248,0.14) 100%);
+    border: 3px solid rgba(56, 189, 248, 0.3);
+  }
+  #helmet-overlay.active { opacity: 1; }
+
+  #crosshair {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 28px; height: 28px; border: 2px solid rgba(56, 189, 248, 0.65);
+    border-radius: 50%; pointer-events: none; opacity: 0; transition: all 0.15s; z-index: 8;
+  }
+  #crosshair::after {
+    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 5px; height: 5px; background: #38bdf8; border-radius: 50%;
+  }
+  #crosshair.active { opacity: 1; }
+  #crosshair.attack-ready {
+    border-color: #f43f5e; transform: translate(-50%, -50%) scale(1.4);
+    box-shadow: 0 0 18px #f43f5e;
+  }
+  #crosshair.attack-ready::after { background: #f43f5e; }
+
+  .bottom-bar { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.96));
+    border: 1px solid rgba(56, 189, 248, 0.5); color: #f8fafc;
+    padding: 8px 14px; border-radius: 10px; font-family: inherit;
+    font-weight: 800; font-size: 0.8rem; cursor: pointer; transition: all 0.18s;
+  }
+  .btn:hover { border-color: #38bdf8; transform: translateY(-2px); box-shadow: 0 0 15px rgba(56, 189, 248, 0.35); }
+  .btn.active-mode { background: linear-gradient(135deg, #0284c7, #2563eb); border-color: #bae6fd; }
+  .btn.lang-btn { background: linear-gradient(135deg, #7c3aed, #4f46e5); border-color: #ddd6fe; }
+
+  #action-prompt {
+    position: absolute; bottom: 82px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.92); border: 2px solid #10b981;
+    padding: 10px 24px; border-radius: 14px; font-weight: 900; font-size: 0.95rem;
+    color: #a7f3d0; opacity: 0; pointer-events: none; transition: all 0.18s;
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.45); text-align: center;
+  }
+  #action-prompt.show { opacity: 1; }
+  #action-prompt.attack {
+    border-color: #f43f5e; color: #fecdd3;
+    background: rgba(69, 10, 26, 0.95);
+    box-shadow: 0 0 32px rgba(244, 63, 94, 0.8);
+    animation: pulseAttack 0.7s infinite alternate;
+  }
+  @keyframes pulseAttack { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.06); } }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="labels-container"></div>
+<div id="helmet-overlay"></div>
+<div id="crosshair"></div>
+
+<div id="combat-hud">
+  <div class="fighter-card">
+    <div class="fighter-name"><span id="atk-name">سرباز</span><span id="atk-lvl" style="color:#38bdf8">Lv.1</span></div>
+    <div class="fighter-hp-bar"><div id="atk-hp" class="fighter-hp-inner" style="width:100%; background:#38bdf8;"></div></div>
+  </div>
+  <div class="vs-badge">⚔️ VS</div>
+  <div class="fighter-card">
+    <div class="fighter-name"><span id="def-name">دشمن</span><span id="def-lvl" style="color:#f43f5e">Lv.2</span></div>
+    <div class="fighter-hp-bar">
+      <div id="def-hp-trail" style="width:100%; height:100%; background:#fff; position:absolute; top:0; left:0; transition:width 0.4s;"></div>
+      <div id="def-hp" class="fighter-hp-inner" style="width:100%; background:#f43f5e;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="ui-layer">
+  <div class="top-bar">
+    <div class="glass-panel title-box">
+      <h1 id="ui-title">⚔️ نبرد شطرنج فضایی ۳ بعدی</h1>
+      <div class="turn-badge">
+        <span id="turn-dot" class="dot white"></span>
+        <span id="turn-text">نوبت ارتش سفید (شما)</span>
+      </div>
+      <div id="selected-info" style="font-size: 0.77rem; color: #94a3b8; margin-top: 6px;">
+        روی یکی از جنگجوهای سفید کلیک کنید
+      </div>
+    </div>
+
+    <div class="glass-panel controls-card" id="ui-controls">
+      <div>🎮 <b>کنترل جنگجو و مبارزه شطرنج:</b></div>
+      <div>• <span class="key">کلیک روی مهره خودی</span> انتخاب جنگجو</div>
+      <div>• <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> دویدن آزادانه به سمت خانه‌های مجاز</div>
+      <div>• <span class="key">کلیک چپ موس</span> ضربه شمشیر به دشمن مجاز (کمبو تا فینیشر!)</div>
+      <div>• <span class="key">F</span> یا <span class="key">Enter</span> تثبیت توقف در خانه خالی سبز</div>
+      <div>• <span class="key">Space</span> پرش فضایی | <span class="key">V</span> تغییر دید | <span class="key">Esc</span> لغو</div>
+    </div>
+  </div>
+
+  <div id="toast-msg">پیام سیستم</div>
+  <div id="action-prompt">کلید F: تثبیت موقعیت</div>
+
+  <div class="bottom-bar">
+    <div class="glass-panel btn-group">
+      <button class="btn lang-btn" id="btn-lang">🌐 EN / فارسی</button>
+      <button class="btn active-mode" id="btn-cam-toggle">🎥 دید: سوم‌شخص (V)</button>
+      <button class="btn" id="btn-cancel" style="display:none; border-color:#f59e0b; color:#fde68a;">↩️ بازگشت به خانه اول (Esc)</button>
+      <button class="btn" id="btn-reset">🔄 شروع مجدد نبرد</button>
+    </div>
+    <div class="glass-panel" id="ui-status" style="font-size: 0.78rem; color: #38bdf8;">
+      ✨ قوانین کامل کیش، مات و پین شطرنج فعال است
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ==========================================
+// 0. سیستم دو زبانه (FA / EN)
+// ==========================================
+let currentLang = 'fa';
+const I18N = {
+  fa: {
+    title: '⚔️ نبرد شطرنج فضایی ۳ بعدی',
+    turnWhite: 'نوبت ارتش سفید (شما)',
+    turnBlack: 'نوبت ارتش سیاه (هوش مصنوعی...)',
+    checkAlert: ' ⚠️ (شاه در وضعیت کیش!)',
+    selectHint: 'روی یکی از جنگجوهای سفید کلیک کنید',
+    selectedFormat: (name, lvl, hp, maxHp, dmg) => `جنگجو: ${name} (Lv.${lvl}) | ❤️ ${hp}/${maxHp} | ⚔️ قدرت: ${dmg}`,
+    controlsHtml: `
+      <div>🎮 <b>کنترل جنگجو و مبارزه شطرنج:</b></div>
+      <div>• <span class="key">کلیک روی مهره خودی</span> انتخاب جنگجو</div>
+      <div>• <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> دویدن به خانه‌های مجاز شطرنج</div>
+      <div>• <span class="key">کلیک چپ موس</span> ضربه شمشیر به دشمنِ مجاز (تا فینیشر!)</div>
+      <div>• <span class="key">F</span> یا <span class="key">Enter</span> تثبیت حرکت در خانه سبز</div>
+      <div>• <span class="key">Space</span> پرش | <span class="key">V</span> تغییر دوربین | <span class="key">Esc</span> لغو</div>
+    `,
+    camTps: '🎥 دید: سوم‌شخص (V)',
+    camFps: '👁️ دید: اول‌شخص (V)',
+    camTop: '🛸 دید: تاکتیکی بالا (V)',
+    cancelBtn: '↩️ بازگشت به خانه اول (Esc)',
+    resetBtn: '🔄 شروع مجدد نبرد',
+    statusNote: '✨ قوانین کامل کیش، مات و سلاح‌های بیرون از بدن فعال است',
+    noMovesErr: '⛔ این مهره هیچ حرکت قانونی ندارد (یا شاه کیش می‌شود)!',
+    selectToast: (name, lvl) => `⚔️ ${name} (Lv.${lvl}) آماده حرکت!`,
+    returnToast: '↩️ جنگجو به خانه اول برگشت',
+    outOfBoundsErr: '🚫 خروج از میدان نبرد! بازگشت به خانه اول.',
+    blockedJumpErr: '🚫 مسیر مسدود است! فقط اسب با Space از روی مهره‌ها می‌پرد.',
+    illegalTileErr: '🚫 خانه غیرمجاز طبق قانون شطرنج (یا کیش شدن شاه)! بازگشت.',
+    attackPrompt: (name, hp, maxHp) => `⚔️ کلیک چپ موس: ضربه شمشیر به «${name}» (${hp}/${maxHp} HP)`,
+    IllegalTargetPrompt: '⚠️ این دشمن در مسیر قانونی حمله این مهره نیست!',
+    kingCannotBeCaptured: '👑 شاه را نمی‌توان مستقیم زد! باید او را کیش و مات کنید.',
+    confirmMovePrompt: 'کلید F یا Enter: تثبیت موقعیت در این خانه',
+    finisherToast: (atk, def) => `💥 فینیشر مرگبار! ${atk} ⬅️ ${def} را نابود کرد!`,
+    hitToast: (def, dmg, rem) => `⚔️ ضربه اصابت کرد! (-${dmg} HP) | باقی‌مانده ${def}: ${rem}`,
+    aiHitToast: (atk, def, dmg) => `⚠️ ${atk} دشمن به ${def} شما ضربه زد! (-${dmg} HP)`,
+    checkmateWin: '🏆 کیش و مات! ارتش سفید پیروز نبرد کیهانی شد!',
+    checkmateLoss: '💀 کیش و مات! ارتش سیاه پیروز شد!',
+    stalemate: '🤝 پات (تساوی)! هیچ حرکت قانونی وجود ندارد.',
+    checkToast: '⚠️ هشدار: شاه در وضعیت کیش قرار گرفت!',
+    resetToast: '🔄 میدان نبرد کیهانی بازسازی شد!',
+    pieces: {
+      p: 'سرباز نیزه‌دار', r: 'رخ تبرزن غول‌پیکر', n: 'شوالیه سوارکار',
+      b: 'فیل داس‌دار کیهانی', q: 'وزیر والکیری دو شمشیر', k: 'امپراتور شاه'
+    }
+  },
+  en: {
+    title: '⚔️ 3D SPACE BATTLE CHESS',
+    turnWhite: 'White Army Turn (You)',
+    turnBlack: 'Black Army Turn (AI Thinking...)',
+    checkAlert: ' ⚠️ (KING IN CHECK!)',
+    selectHint: 'Click on any White Warrior to command',
+    selectedFormat: (name, lvl, hp, maxHp, dmg) => `Warrior: ${name} (Lv.${lvl}) | ❤️ ${hp}/${maxHp} | ⚔️ DMG: ${dmg}`,
+    controlsHtml: `
+      <div>🎮 <b>Warrior & Chess Combat Controls:</b></div>
+      <div>• <span class="key">Click Allied Piece</span> Select Warrior</div>
+      <div>• <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> Run across legal chess squares</div>
+      <div>• <span class="key">Left Click</span> Slash legal enemy target (Combo & Finisher!)</div>
+      <div>• <span class="key">F</span> or <span class="key">Enter</span> Confirm move on green square</div>
+      <div>• <span class="key">Space</span> Jump | <span class="key">V</span> Camera View | <span class="key">Esc</span> Cancel</div>
+    `,
+    camTps: '🎥 View: Third-Person (V)',
+    camFps: '👁️ View: First-Person (V)',
+    camTop: '🛸 View: Tactical Top (V)',
+    cancelBtn: '↩️ Return to Start Square (Esc)',
+    resetBtn: '🔄 Restart Battle',
+    statusNote: '✨ Full Chess Rules (Check/Checkmate/Pin) & Textured Weapons Active',
+    noMovesErr: '⛔ No legal chess moves for this warrior (King would be in check)!',
+    selectToast: (name, lvl) => `⚔️ ${name} (Lv.${lvl}) ready for action!`,
+    returnToast: '↩️ Warrior returned to starting square',
+    outOfBoundsErr: '🚫 Out of bounds! Returned to start.',
+    blockedJumpErr: '🚫 Path blocked! Only Knight can jump over pieces with Space.',
+    illegalTileErr: '🚫 Illegal chess move (or leaves King in check)! Returned.',
+    attackPrompt: (name, hp, maxHp) => `⚔️ Left Click: Slash "${name}" (${hp}/${maxHp} HP)`,
+    IllegalTargetPrompt: '⚠️ Target is not on a legal chess attack square for this piece!',
+    kingCannotBeCaptured: '👑 The King cannot be directly captured! Force Checkmate instead.',
+    confirmMovePrompt: 'Press F or Enter: Confirm move on this square',
+    finisherToast: (atk, def) => `💥 LETHAL FINISHER! ${atk} obliterated ${def}!`,
+    hitToast: (def, dmg, rem) => `⚔️ Direct Hit! (-${dmg} HP) | ${def} HP left: ${rem}`,
+    aiHitToast: (atk, def, dmg) => `⚠️ Enemy ${atk} slashed your ${def}! (-${dmg} HP)`,
+    checkmateWin: '🏆 CHECKMATE! White Cosmic Army Wins!',
+    checkmateLoss: '💀 CHECKMATE! Black Cosmic Army Wins!',
+    stalemate: '🤝 STALEMATE! No legal moves remaining.',
+    checkToast: '⚠️ WARNING: King is under CHECK!',
+    resetToast: '🔄 Cosmic Battlefield Reset!',
+    pieces: {
+      p: 'Vanguard Spearman', r: 'Colossus Berserker', n: 'Outrider Cavalier',
+      b: 'Chrono Warlock', q: 'Twin-Blade Valkyrie', k: 'Supreme Emperor'
+    }
+  }
+};
+
+function t(key) { return I18N[currentLang][key]; }
+function getPieceName(type) { return I18N[currentLang].pieces[type]; }
+
+// ==========================================
+// 1. سیستم صوتی سینک‌شده
+// ==========================================
+class SoundFX {
+  constructor() { this.ctx = null; }
+  init() {
+    if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+  playTone(freq, type, duration, vol = 0.14, slideTo = null) {
+    try {
+      this.init();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+      gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(); osc.stop(this.ctx.currentTime + duration);
+    } catch (e) {}
+  }
+  playNoise(duration, vol = 0.2, highpass = 700) {
+    try {
+      this.init();
+      const bufferSize = this.ctx.sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass'; filter.frequency.value = highpass;
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.005, this.ctx.currentTime + duration);
+      noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+      noise.start();
+    } catch (e) {}
+  }
+  step() { this.playTone(105, 'triangle', 0.05, 0.05, 55); }
+  select() { this.playTone(520, 'sine', 0.12, 0.12, 860); }
+  jump() { this.playTone(200, 'sine', 0.3, 0.16, 680); }
+  error() { this.playTone(170, 'sawtooth', 0.25, 0.18, 80); }
+  swordWhoosh() {
+    this.playNoise(0.11, 0.22, 1300);
+    this.playTone(400, 'sine', 0.1, 0.11, 130);
+  }
+  metalClash() {
+    this.playNoise(0.14, 0.35, 1900);
+    this.playTone(980, 'square', 0.09, 0.18, 290);
+    this.playTone(1450, 'sawtooth', 0.12, 0.14, 480);
+  }
+  finisherKill() {
+    this.playNoise(0.45, 0.45, 250);
+    this.playTone(140, 'sawtooth', 0.5, 0.32, 32);
+    setTimeout(() => this.playTone(620, 'square', 0.25, 0.2, 150), 70);
+  }
+}
+const sfx = new SoundFX();
+
+// ==========================================
+// 2. تولید تکسچرهای Procedural (زره، لباس، شمشیر، سنگ فضایی، سیاره)
+// ==========================================
+function createArmorTexture(primaryHex, secondaryHex, trimHex) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = primaryHex;
+  ctx.fillRect(0, 0, 256, 256);
+
+  // پنل‌های زره و بافت پارچه/فلز
+  ctx.fillStyle = secondaryHex;
+  for (let y = 0; y < 256; y += 32) {
+    ctx.fillRect(0, y, 256, 10);
+  }
+  // خطوط طلایی/نقره‌ای حکاکی روی زره
+  ctx.strokeStyle = trimHex;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(12, 12, 232, 232);
+  ctx.beginPath();
+  ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+  ctx.moveTo(32, 64); ctx.lineTo(224, 64);
+  ctx.moveTo(48, 160); ctx.lineTo(208, 160);
+  ctx.stroke();
+
+  // پرچ‌های فلزی زره
+  ctx.fillStyle = trimHex;
+  for (let x = 24; x <= 232; x += 52) {
+    for (let y = 24; y <= 232; y += 52) {
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createClothTexture(baseHex, stripeHex) {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = stripeHex;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 128; i += 6) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 128); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(128, i); ctx.stroke();
+  }
+  // حاشیه طلایی پایین لباس/شنل
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillRect(0, 110, 128, 12);
+  const tex = new THREE.CanvasTexture(c);
+  return tex;
+}
+
+function createDamascusBladeTexture(glowHex) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 256, 0);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.25, '#cbd5e1');
+  grad.addColorStop(0.5, '#475569');
+  grad.addColorStop(0.75, '#cbd5e1');
+  grad.addColorStop(1, '#ffffff');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 256);
+
+  // موج‌های فولاد دمشقی
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+  ctx.lineWidth = 2;
+  for (let y = 0; y < 256; y += 10) {
+    ctx.beginPath();
+    for (let x = 0; x <= 256; x += 16) {
+      ctx.lineTo(x, y + Math.sin(x * 0.08) * 5);
+    }
+    ctx.stroke();
+  }
+  // رگه انرژی وسط تیغه
+  ctx.strokeStyle = glowHex;
+  ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(128, 0); ctx.lineTo(128, 256); ctx.stroke();
+  return new THREE.CanvasTexture(c);
+}
+
+function createTileMarbleTexture(isLight) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = isLight ? '#1e293b' : '#090d16';
+  ctx.fillRect(0, 0, 256, 256);
+
+  // رگه‌های مرمر کیهانی
+  ctx.strokeStyle = isLight ? 'rgba(56, 189, 248, 0.28)' : 'rgba(168, 85, 247, 0.22)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 14; i++) {
+    ctx.beginPath();
+    let x = Math.random() * 256, y = 0;
+    ctx.moveTo(x, y);
+    while (y < 256) {
+      y += 24; x += (Math.random() - 0.5) * 45;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // قاب نئونی دور هر خانه شطرنج
+  ctx.strokeStyle = isLight ? 'rgba(56, 189, 248, 0.65)' : 'rgba(148, 163, 184, 0.25)';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(6, 6, 244, 244);
+  return new THREE.CanvasTexture(c);
+}
+
+function createPlanetTexture(c1, c2, c3) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const ctx = c.getContext('2d');
+  for (let y = 0; y < 256; y++) {
+    const t = y / 256;
+    ctx.fillStyle = t < 0.5 ? c1 : c2;
+    ctx.fillRect(0, y, 512, 1);
+  }
+  // نوارهای طوفانی سیاره
+  for (let i = 0; i < 45; i++) {
+    ctx.fillStyle = i % 2 === 0 ? c2 : c3;
+    ctx.globalAlpha = 0.35;
+    const y = Math.random() * 256;
+    const h = 4 + Math.random() * 18;
+    ctx.fillRect(0, y, 512, h);
+  }
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = c3;
+  ctx.beginPath(); ctx.ellipse(180, 140, 42, 22, 0.2, 0, Math.PI * 2); ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+
+// ==========================================
+// 3. مشخصات RPG مهره‌ها
+// ==========================================
+const PIECE_STATS = {
+  p: { level: 1, maxHp: 100, dmg: 40 },
+  n: { level: 3, maxHp: 150, dmg: 55 },
+  b: { level: 3, maxHp: 140, dmg: 60 },
+  r: { level: 5, maxHp: 220, dmg: 75 },
+  q: { level: 9, maxHp: 280, dmg: 95 },
+  k: { level: 10, maxHp: 400, dmg: 110 }
+};
+
+// ==========================================
+// 4. صحنه سه‌بعدی، صخره‌های فضایی، سیاره‌ها و سیاه‌چاله
+// ==========================================
+const container = document.getElementById('canvas-container');
+const labelsContainer = document.getElementById('labels-container');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x02030a, 0.0028);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1500);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const TILE_SIZE = 3.2;
+const BOARD_OFFSET = (8 * TILE_SIZE) / 2 - TILE_SIZE / 2;
+
+const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.85);
+scene.add(ambientLight);
+
+const mainLight = new THREE.DirectionalLight(0xffffff, 1.45);
+mainLight.position.set(22, 42, 26);
+mainLight.castShadow = true;
+mainLight.shadow.mapSize.width = 2048;
+mainLight.shadow.mapSize.height = 2048;
+scene.add(mainLight);
+
+const blueRim = new THREE.PointLight(0x38bdf8, 2.2, 85);
+blueRim.position.set(-22, 14, 22);
+scene.add(blueRim);
+
+const purpleRim = new THREE.PointLight(0xc084fc, 2.2, 85);
+purpleRim.position.set(22, 16, -22);
+scene.add(purpleRim);
+
+// محیط کیهانی با ستاره‌ها، سحابی، ۲ سیاره تکسچردار، سیاه‌چاله فضایی و صخره‌های معلق زیر صفحه
+const spaceGroup = new THREE.Group();
+const floatingRocks = [];
+scene.add(spaceGroup);
+
+function buildCosmicEnvironment() {
+  // ۱. ستاره‌های رنگارنگ
+  const starGeo = new THREE.BufferGeometry();
+  const count = 4000;
+  const pos = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = 90 + Math.random() * 420;
+    const t = Math.random() * Math.PI * 2;
+    const p = Math.acos(2 * Math.random() - 1);
+    pos[i * 3] = r * Math.sin(p) * Math.cos(t);
+    pos[i * 3 + 1] = r * Math.sin(p) * Math.sin(t);
+    pos[i * 3 + 2] = r * Math.cos(p);
+    const c = new THREE.Color().setHSL(0.55 + Math.random() * 0.35, 0.85, 0.75 + Math.random() * 0.25);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  starGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  spaceGroup.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 1.15, vertexColors: true, transparent: true, opacity: 0.95 })));
+
+  // ۲. سیاه‌چاله فضایی عظیم (Black Hole + Accretion Disk)
+  const blackHoleGroup = new THREE.Group();
+  blackHoleGroup.position.set(-55, 22, -68);
+  const bhCore = new THREE.Mesh(
+    new THREE.SphereGeometry(9.5, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0x000000 })
+  );
+  blackHoleGroup.add(bhCore);
+
+  // هاله فوتونی دور سیاه‌چاله
+  const photonRing = new THREE.Mesh(
+    new THREE.RingGeometry(9.7, 11.2, 64),
+    new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+  );
+  blackHoleGroup.add(photonRing);
+
+  // دیسک چرخان پلاسما دور سیاه‌چاله
+  const diskGeo = new THREE.RingGeometry(11.5, 26, 64);
+  const diskMat = new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide, transparent: true, opacity: 0.65 });
+  const accretionDisk = new THREE.Mesh(diskGeo, diskMat);
+  accretionDisk.rotation.x = Math.PI / 2.4;
+  blackHoleGroup.add(accretionDisk);
+
+  const outerDisk = new THREE.Mesh(
+    new THREE.RingGeometry(24, 34, 64),
+    new THREE.MeshBasicMaterial({ color: 0xa855f7, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
+  );
+  outerDisk.rotation.x = Math.PI / 2.4;
+  blackHoleGroup.add(outerDisk);
+  blackHoleGroup.userData = { accretionDisk, outerDisk, photonRing };
+  spaceGroup.add(blackHoleGroup);
+  spaceGroup.userData.blackHole = blackHoleGroup;
+
+  // ۳. سیاره گازی با تکسچر طوفانی و حلقه کیهانی
+  const gasPlanetTex = createPlanetTexture('#1e1b4b', '#3b82f6', '#38bdf8');
+  const gasPlanet = new THREE.Mesh(
+    new THREE.SphereGeometry(16, 48, 48),
+    new THREE.MeshStandardMaterial({ map: gasPlanetTex, roughness: 0.6, metalness: 0.2 })
+  );
+  gasPlanet.position.set(58, 12, -55);
+  spaceGroup.add(gasPlanet);
+
+  const pRing = new THREE.Mesh(
+    new THREE.RingGeometry(20, 32, 64),
+    new THREE.MeshStandardMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+  );
+  pRing.rotation.x = Math.PI / 2.2;
+  pRing.rotation.y = 0.3;
+  gasPlanet.add(pRing);
+  spaceGroup.userData.gasPlanet = gasPlanet;
+
+  // ۴. سیاره گدازه‌ای سرخ در دوردست
+  const lavaPlanetTex = createPlanetTexture('#450a0a', '#dc2626', '#fbbf24');
+  const lavaPlanet = new THREE.Mesh(
+    new THREE.SphereGeometry(9, 32, 32),
+    new THREE.MeshStandardMaterial({ map: lavaPlanetTex, emissive: 0x7f1d1d, emissiveIntensity: 0.4 })
+  );
+  lavaPlanet.position.set(42, -18, 52);
+  spaceGroup.add(lavaPlanet);
+  spaceGroup.userData.lavaPlanet = lavaPlanet;
+}
+buildCosmicEnvironment();
+
+// ==========================================
+// 5. ساخت صفحه شطرنج مرمر کیهانی + صخره‌های فضایی معلق زیر صفحه
+// ==========================================
+const boardGroup = new THREE.Group();
+scene.add(boardGroup);
+const tileMeshes = [];
+const highlightMeshes = [];
+
+function buildBoard() {
+  const lightTex = createTileMarbleTexture(true);
+  const darkTex = createTileMarbleTexture(false);
+
+  // قاب کریستالی-فلزی دور صفحه شطرنج
+  const borderGeo = new THREE.BoxGeometry(8 * TILE_SIZE + 2.4, 1.3, 8 * TILE_SIZE + 2.4);
+  const borderMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.2 });
+  const borderMesh = new THREE.Mesh(borderGeo, borderMat);
+  borderMesh.position.y = -0.7;
+  borderMesh.receiveShadow = true;
+  boardGroup.add(borderMesh);
+
+  // نوار نئونی دور صفحه
+  const neonEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(borderGeo),
+    new THREE.LineBasicMaterial({ color: 0x38bdf8 })
+  );
+  neonEdges.position.y = -0.7;
+  boardGroup.add(neonEdges);
+
+  // صخره اصلی بزرگ زیر صفحه شطرنج (جزیره فضایی معلق)
+  const islandGeo = new THREE.ConeGeometry(16, 11, 9);
+  const islandMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85, metalness: 0.3, flatShading: true });
+  const island = new THREE.Mesh(islandGeo, islandMat);
+  island.rotation.x = Math.PI;
+  island.position.y = -6.8;
+  boardGroup.add(island);
+
+  // هسته انرژی آبی زیر جزیره فضایی
+  const coreRing = new THREE.Mesh(
+    new THREE.TorusGeometry(11, 0.35, 16, 64),
+    new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+  );
+  coreRing.rotation.x = Math.PI / 2;
+  coreRing.position.y = -2.2;
+  boardGroup.add(coreRing);
+
+  // سنگ‌های فضایی معلق زیر و اطراف صفحه شطرنج
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8, metalness: 0.35, flatShading: true });
+  const crystalMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.8, flatShading: true });
+
+  for (let i = 0; i < 34; i++) {
+    const rGroup = new THREE.Group();
+    const radius = 0.8 + Math.random() * 2.2;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(radius, 0), rockMat);
+    rock.scale.set(1, 0.6 + Math.random() * 0.8, 1);
+    rGroup.add(rock);
+
+    // کریستال درخشان روی برخی سنگ‌های معلق
+    if (i % 3 === 0) {
+      const crys = new THREE.Mesh(new THREE.OctahedronGeometry(radius * 0.45, 0), crystalMat);
+      crys.position.set(0, radius * 0.6, 0);
+      rGroup.add(crys);
+    }
+
+    const angle = (i / 34) * Math.PI * 2 + Math.random() * 0.3;
+    const dist = 10 + Math.random() * 14;
+    const yPos = -3.5 - Math.random() * 11;
+    rGroup.position.set(Math.cos(angle) * dist, yPos, Math.sin(angle) * dist);
+    rGroup.userData = {
+      baseY: yPos,
+      speed: 0.8 + Math.random() * 1.4,
+      phase: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.015
+    };
+    floatingRocks.push(rGroup);
+    boardGroup.add(rGroup);
+  }
+
+  // خانه‌های ۶۴ گانه شطرنج با تکسچر مرمر کیهانی
+  for (let r = 0; r < 8; r++) {
+    tileMeshes[r] = [];
+    highlightMeshes[r] = [];
+    for (let c = 0; c < 8; c++) {
+      const isLight = (r + c) % 2 === 0;
+      const tGeo = new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.36, TILE_SIZE * 0.98);
+      const tMat = new THREE.MeshStandardMaterial({
+        map: isLight ? lightTex : darkTex,
+        metalness: 0.55,
+        roughness: 0.28
+      });
+      const tile = new THREE.Mesh(tGeo, tMat);
+      const pos = boardToWorld(r, c);
+      tile.position.set(pos.x, -0.18, pos.z);
+      tile.receiveShadow = true;
+      boardGroup.add(tile);
+      tileMeshes[r][c] = tile;
+
+      const hGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.88, TILE_SIZE * 0.88);
+      const hMat = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0, side: THREE.DoubleSide });
+      const hMesh = new THREE.Mesh(hGeo, hMat);
+      hMesh.rotation.x = -Math.PI / 2;
+      hMesh.position.set(pos.x, 0.03, pos.z);
+      boardGroup.add(hMesh);
+      highlightMeshes[r][c] = hMesh;
+    }
+  }
+}
+
+function boardToWorld(r, c) { return { x: c * TILE_SIZE - BOARD_OFFSET, z: r * TILE_SIZE - BOARD_OFFSET }; }
+function worldToBoard(x, z) { return { r: Math.round((z + BOARD_OFFSET) / TILE_SIZE), c: Math.round((x + BOARD_OFFSET) / TILE_SIZE) }; }
+buildBoard();
+
+// حلقه قرمز زیر پای هدفِ قانونی
+const targetLockRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.15, 1.48, 32),
+  new THREE.MeshBasicMaterial({ color: 0xf43f5e, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+);
+targetLockRing.rotation.x = -Math.PI / 2;
+targetLockRing.position.y = 0.06;
+targetLockRing.visible = false;
+scene.add(targetLockRing);
+
+// ==========================================
+// 6. ساخت سلاح‌های تیز و تکسچردار (محور چرخش در قبضه، بیرون از بدن!)
+// ==========================================
+// نکته کلیدی: تمام سلاح‌ها در جهت +Y (به سمت بالا/جلو از مشت جنگجو) ساخته می‌شوند
+// تا هرگز وارد سینه یا شکم کاراکتر نشوند!
+function createSharpBladeGeometry(length, width, tipLength) {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(width / 2, length * 0.12);
+  shape.lineTo(width * 0.62, length - tipLength);
+  shape.lineTo(0, length); // نوک تیز شمشیر
+  shape.lineTo(-width * 0.62, length - tipLength);
+  shape.lineTo(-width / 2, length * 0.12);
+  shape.closePath();
+
+  const extrudeSettings = { depth: 0.045, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.025, bevelThickness: 0.02 };
+  const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  geo.center();
+  // انتقال پایه تیغه به نقطه صفر (قبضه در دست کاراکتر)
+  geo.translate(0, length / 2, 0);
+  return geo;
+}
+
+function createAxeHeadGeometry() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, -0.18);
+  shape.quadraticCurveTo(0.45, -0.28, 0.72, -0.52);
+  shape.quadraticCurveTo(0.88, 0, 0.72, 0.52);
+  shape.quadraticCurveTo(0.45, 0.28, 0, 0.18);
+  shape.quadraticCurveTo(-0.45, 0.28, -0.72, 0.52);
+  shape.quadraticCurveTo(-0.88, 0, -0.72, -0.52);
+  shape.quadraticCurveTo(-0.45, -0.28, 0, -0.18);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.03, bevelThickness: 0.02 });
+  geo.center();
+  return geo;
+}
+
+function createKatanaGeometry(length) {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.quadraticCurveTo(0.08, length * 0.5, 0.2, length - 0.28);
+  shape.lineTo(0.04, length); // نوک تیز کاتانا
+  shape.quadraticCurveTo(-0.04, length * 0.5, -0.05, 0);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.03, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.015, bevelThickness: 0.015 });
+  return geo;
+}
+
+// تکسچر مشترک سلاح‌ها
+const whiteBladeTex = createDamascusBladeTexture('#38bdf8');
+const blackBladeTex = createDamascusBladeTexture('#f43f5e');
+
+// تکسچر زره و لباس برای دو ارتش
+const whiteArmorTex = createArmorTexture('#e2e8f0', '#94a3b8', '#fbbf24');
+const blackArmorTex = createArmorTexture('#1e1b2e', '#0f172a', '#d97706');
+const whiteClothTex = createClothTexture('#1d4ed8', '#2563eb');
+const blackClothTex = createClothTexture('#881337', '#9f1239');
+
+// ==========================================
+// 7. ساخت کاراکترهای تکسچردار با بازوهای بیرون از بدن
+// ==========================================
+function createWarriorMesh(type, color) {
+  const isWhite = color === 'w';
+  const root = new THREE.Group();
+
+  const armorMat = new THREE.MeshStandardMaterial({
+    map: isWhite ? whiteArmorTex : blackArmorTex,
+    metalness: 0.72, roughness: 0.28
+  });
+  const clothMat = new THREE.MeshStandardMaterial({
+    map: isWhite ? whiteClothTex : blackClothTex,
+    roughness: 0.65, metalness: 0.15, side: THREE.DoubleSide
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: isWhite ? 0xfbbf24 : 0xf59e0b,
+    metalness: 0.92, roughness: 0.18
+  });
+  const darkSteelMat = new THREE.MeshStandardMaterial({
+    color: 0x334155, metalness: 0.85, roughness: 0.25
+  });
+  const glowMat = new THREE.MeshStandardMaterial({
+    color: isWhite ? 0x38bdf8 : 0xf43f5e,
+    emissive: isWhite ? 0x0284c7 : 0xe11d48,
+    emissiveIntensity: 2.2
+  });
+  const bladeMat = new THREE.MeshStandardMaterial({
+    map: isWhite ? whiteBladeTex : blackBladeTex,
+    metalness: 0.92, roughness: 0.12
+  });
+
+  // پایه انرژی زیر پا
+  const aura = new THREE.Mesh(
+    new THREE.RingGeometry(0.72, 0.92, 24),
+    new THREE.MeshBasicMaterial({ color: isWhite ? 0x38bdf8 : 0xf43f5e, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+  );
+  aura.rotation.x = -Math.PI / 2;
+  aura.position.y = 0.03;
+  root.add(aura);
+
+  // مفاصل حرکتی
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
+  const torsoPivot = new THREE.Group();
+  torsoPivot.position.y = 0.95;
+  bodyPivot.add(torsoPivot);
+
+  // ۱. پاها با زره ساق و ران تکسچردار
+  const legL = new THREE.Group(); legL.position.set(-0.27, 0.92, 0);
+  const legR = new THREE.Group(); legR.position.set(0.27, 0.92, 0);
+  [legL, legR].forEach(leg => {
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.48, 12), clothMat);
+    thigh.position.y = -0.22;
+    const knee = new THREE.Mesh(new THREE.OctahedronGeometry(0.15, 1), trimMat);
+    knee.position.set(0, -0.45, 0.06);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.11, 0.48, 12), armorMat);
+    shin.position.y = -0.68;
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.38), trimMat);
+    boot.position.set(0, -0.9, 0.06);
+    leg.add(thigh, knee, shin, boot);
+    bodyPivot.add(leg);
+  });
+
+  // ۲. دامن زرهی و لباس جنگی (Tassets & Tunic)
+  const tunic = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.5, 0.45, 14, 1, true), clothMat);
+  tunic.position.y = 0.05;
+  torsoPivot.add(tunic);
+
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.39, 0.41, 0.14, 16), trimMat);
+  belt.position.y = 0.12;
+  const beltGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), glowMat);
+  beltGem.position.set(0, 0.12, 0.4);
+  torsoPivot.add(belt, beltGem);
+
+  // ۳. سینه‌بند عضلانی تکسچردار
+  const chestPts = [
+    new THREE.Vector2(0.01, 0.12),
+    new THREE.Vector2(0.37, 0.18),
+    new THREE.Vector2(0.34, 0.42),
+    new THREE.Vector2(0.50, 0.78),
+    new THREE.Vector2(0.44, 1.05),
+    new THREE.Vector2(0.22, 1.15),
+    new THREE.Vector2(0.01, 1.16)
+  ];
+  const chestGeo = new THREE.LatheGeometry(chestPts, 16);
+  const chest = new THREE.Mesh(chestGeo, armorMat);
+  chest.scale.set(1.08, 1, 0.76);
+  chest.castShadow = true;
+  torsoPivot.add(chest);
+
+  // نشان درخشان روی سینه
+  const corePlate = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.36, 0.12), trimMat);
+  corePlate.position.set(0, 0.72, 0.31);
+  const coreLight = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), glowMat);
+  coreLight.position.set(0, 0.72, 0.37);
+  torsoPivot.add(corePlate, coreLight);
+
+  // ۴. شنل پارچه‌ای تکسچردار پشت کاراکتر
+  const capePivot = new THREE.Group();
+  capePivot.position.set(0, 1.02, -0.28);
+  torsoPivot.add(capePivot);
+  const capeGeo = new THREE.PlaneGeometry(0.95, 1.48, 6, 8);
+  const cPos = capeGeo.attributes.position;
+  for (let i = 0; i < cPos.count; i++) {
+    const py = cPos.getY(i);
+    const px = cPos.getX(i);
+    cPos.setZ(i, Math.sin(py * 3.5 + px * 2) * 0.06 - (0.74 - py) * 0.12);
+  }
+  capeGeo.computeVertexNormals();
+  const capeMesh = new THREE.Mesh(capeGeo, clothMat);
+  capeMesh.position.y = -0.68;
+  capePivot.add(capeMesh);
+
+  // ۵. سر و کلاهخود جنگجو
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.3, 0);
+  torsoPivot.add(headGroup);
+
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.27, 18, 18), armorMat);
+  helm.scale.set(0.92, 1.12, 1.05);
+  headGroup.add(helm);
+
+  const faceplate = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.28, 8), trimMat);
+  faceplate.position.set(0, -0.04, 0.06);
+  headGroup.add(faceplate);
+
+  // چشم‌های درخشان جنگجو
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.065, 0.14), glowMat);
+  visor.position.set(0, 0.03, 0.21);
+  headGroup.add(visor);
+
+  // ۶. شانه‌ها و بازوها (با فاصله مناسب از بدن تا سلاح هرگز وارد بدن نشود!)
+  const armL = new THREE.Group();
+  armL.position.set(-0.66, 0.96, 0.08); // کاملاً بیرون از عرض سینه
+  const armR = new THREE.Group();
+  armR.position.set(0.66, 0.96, 0.12);  // کاملاً بیرون و جلوتر از بدن
+  torsoPivot.add(armL, armR);
+
+  [armL, armR].forEach((arm, idx) => {
+    const side = idx === 0 ? -1 : 1;
+    // زره شانه چندلایه
+    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.65), armorMat);
+    pauldron.rotation.z = side * -0.45;
+    pauldron.position.y = 0.06;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.035, 8, 20), trimMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.rotation.y = side * 0.45;
+    pauldron.add(rim);
+
+    // بازو و ساعد که به سمت بیرون و جلو زاویه دارند
+    const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.42, 10), clothMat);
+    upperArm.position.set(side * 0.06, -0.22, 0.05);
+    upperArm.rotation.z = side * 0.15;
+
+    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.4, 10), armorMat);
+    forearm.position.set(side * 0.12, -0.5, 0.22);
+    forearm.rotation.x = Math.PI / 3.2; // ساعد خم به سمت جلو
+
+    const fist = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), trimMat);
+    fist.position.set(side * 0.14, -0.62, 0.38); // مشت کاملاً جلوتر از بدن قرار دارد!
+
+    arm.add(pauldron, upperArm, forearm, fist);
+  });
+
+  // نقطه اتصال سلاح در مشت راست (کاملاً جلو و بیرون از بدن: X=+0.14, Y=-0.62, Z=+0.38)
+  const weaponPivot = new THREE.Group();
+  weaponPivot.position.set(0.14, -0.62, 0.38);
+  armR.add(weaponPivot);
+
+  // نقطه اتصال سپر/سلاح دوم در مشت چپ
+  const shieldPivot = new THREE.Group();
+  shieldPivot.position.set(-0.14, -0.55, 0.36);
+  armL.add(shieldPivot);
+
+  // ۷. طراحی اختصاصی سلاح‌ها و زره هر ۶ کلاس شطرنج
+  // تمام تیغه‌ها در جهت +Y ساخته شده‌اند و با چرخش weaponPivot همیشه رو به جلو/بالا و بیرون از بدن هستند!
+  if (type === 'p') {
+    // سرباز نیزه‌دار با کاکل رومی و سپر
+    const crest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.26, 0.52), glowMat);
+    crest.position.set(0, 0.28, -0.02);
+    headGroup.add(crest);
+
+    // دسته نیزه (مرکز آن در مشت است و نوک تیز آن کاملاً بالا و جلوی سرباز)
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.3, 10), darkSteelMat);
+    shaft.position.y = 0.55;
+    const spearTip = new THREE.Mesh(createSharpBladeGeometry(0.85, 0.26, 0.35), bladeMat);
+    spearTip.position.y = 1.65;
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.16, 10), trimMat);
+    collar.position.y = 1.62;
+    weaponPivot.add(shaft, collar, spearTip);
+
+    // سپر شوالیه‌ای روی دست چپ (بیرون از بدن)
+    const shield = new THREE.Mesh(new THREE.BoxGeometry(0.68, 1.05, 0.08), armorMat);
+    const shieldFrame = new THREE.Mesh(new THREE.BoxGeometry(0.74, 1.12, 0.05), trimMat);
+    shieldFrame.position.z = -0.02;
+    const shieldEmblem = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glowMat);
+    shieldEmblem.position.z = 0.06;
+    shieldPivot.add(shield, shieldFrame, shieldEmblem);
+    shieldPivot.rotation.y = 0.45;
+  }
+  else if (type === 'r') {
+    // رخ غول‌پیکر با شاخ‌های وایکینگی و تبر دوطرفه
+    bodyPivot.scale.set(1.18, 1.12, 1.18);
+    [-1, 1].forEach(s => {
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.48, 10), trimMat);
+      horn.position.set(s * 0.28, 0.22, 0.05);
+      horn.rotation.z = s * -0.65;
+      horn.rotation.x = 0.25;
+      headGroup.add(horn);
+    });
+
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.045, 2.1, 10), darkSteelMat);
+    handle.position.y = 0.55;
+    const axeBlade = new THREE.Mesh(createAxeHeadGeometry(), bladeMat);
+    axeBlade.position.y = 1.38;
+    const topSpike = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.38, 8), bladeMat);
+    topSpike.position.y = 1.75;
+    const coreGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), glowMat);
+    coreGem.position.y = 1.38;
+    weaponPivot.add(handle, axeBlade, topSpike, coreGem);
+  }
+  else if (type === 'n') {
+    // شوالیه سوارکار با اسب زره‌پوش و نیزه سوارکاری
+    const steed = new THREE.Group();
+    const hBody = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.4, 1.4, 14), armorMat);
+    hBody.rotation.x = Math.PI / 2;
+    hBody.position.set(0, 0.72, 0.05);
+    const hChest = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 12), trimMat);
+    hChest.position.set(0, 0.76, 0.62);
+    const hNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.34, 0.85, 12), armorMat);
+    hNeck.position.set(0, 1.25, 0.78);
+    hNeck.rotation.x = 0.42;
+    const hHead = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.68, 8), trimMat);
+    hHead.position.set(0, 1.56, 1.05);
+    hHead.rotation.x = Math.PI / 1.7;
+    const hMane = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.65, 0.16), glowMat);
+    hMane.position.set(0, 1.32, 0.62);
+    hMane.rotation.x = 0.42;
+    steed.add(hBody, hChest, hNeck, hHead, hMane);
+
+    [[-0.28, 0.55], [0.28, 0.55], [-0.28, -0.52], [0.28, -0.52]].forEach(([lx, lz]) => {
+      const hLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.07, 0.72, 8), darkSteelMat);
+      hLeg.position.set(lx, 0.36, lz);
+      steed.add(hLeg);
+    });
+    root.add(steed);
+    bodyPivot.position.set(0, 0.45, -0.08);
+
+    // نیزه بلند سوارکاری رو به جلو و بیرون از بدن
+    const lanceGuard = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.35, 12), trimMat);
+    lanceGuard.position.y = 0.25;
+    const lanceTip = new THREE.Mesh(new THREE.ConeGeometry(0.15, 2.2, 12), bladeMat);
+    lanceTip.position.y = 1.5;
+    const lanceRing = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.035, 8, 16), glowMat);
+    lanceRing.rotation.x = Math.PI / 2;
+    lanceRing.position.y = 0.42;
+    weaponPivot.add(lanceGuard, lanceTip, lanceRing);
+
+    const kShield = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.9, 4), armorMat);
+    kShield.rotation.z = Math.PI;
+    kShield.scale.set(1, 1, 0.22);
+    shieldPivot.add(kShield);
+  }
+  else if (type === 'b') {
+    // فیل جادوگر با تاج کریستالی و داس مرگبار کیهانی
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.65, 6), trimMat);
+    crown.position.y = 0.36;
+    headGroup.add(crown);
+
+    const floatingHalo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.03, 8, 24), glowMat);
+    floatingHalo.rotation.x = Math.PI / 2;
+    floatingHalo.position.y = 0.65;
+    headGroup.add(floatingHalo);
+
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.035, 2.4, 10), trimMat);
+    staff.position.y = 0.65;
+    const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 1), glowMat);
+    orb.position.y = 1.85;
+    // تیغه هلالی داس رو به بیرون (هرگز به سمت بدن برنمی‌گردد)
+    const scytheBlade = new THREE.Mesh(createKatanaGeometry(1.15), bladeMat);
+    scytheBlade.position.set(0.05, 1.78, 0);
+    scytheBlade.rotation.z = -Math.PI / 2.2;
+    weaponPivot.add(staff, orb, scytheBlade);
+  }
+  else if (type === 'q') {
+    // وزیر والکیری با تاج، بال‌های نوری و دو شمشیر کاتانا در دو دست
+    const tiara = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.24, 8, 1, true), trimMat);
+    tiara.position.y = 0.25;
+    headGroup.add(tiara);
+
+    // بال‌های انرژی والکیری
+    [-1, 1].forEach(s => {
+      const wingGroup = new THREE.Group();
+      wingGroup.position.set(s * 0.22, 0.88, -0.25);
+      for (let f = 0; f < 4; f++) {
+        const feather = new THREE.Mesh(createSharpBladeGeometry(1.25 - f * 0.2, 0.16, 0.3), glowMat);
+        feather.rotation.z = s * (-0.45 - f * 0.24);
+        feather.rotation.y = -0.25;
+        wingGroup.add(feather);
+      }
+      torsoPivot.add(wingGroup);
+    });
+
+    // کاتانای دست راست
+    const hiltR = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.34, 8), darkSteelMat);
+    const guardR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.14), trimMat);
+    guardR.position.y = 0.18;
+    const katanaR = new THREE.Mesh(createKatanaGeometry(1.65), bladeMat);
+    katanaR.position.y = 0.2;
+    weaponPivot.add(hiltR, guardR, katanaR);
+
+    // کاتانای دست چپ (کاملاً بیرون از بدن)
+    const hiltL = hiltR.clone();
+    const guardL = guardR.clone();
+    const katanaL = new THREE.Mesh(createKatanaGeometry(1.55), bladeMat);
+    katanaL.position.y = 0.2;
+    shieldPivot.add(hiltL, guardL, katanaL);
+  }
+  else if (type === 'k') {
+    // امپراتور شاه با تاج سلطنتی و شمشیر عظیم دو لبه (Greatsword)
+    bodyPivot.scale.set(1.16, 1.16, 1.16);
+    const crownBase = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.25, 0.24, 12), trimMat);
+    crownBase.position.y = 0.26;
+    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.34, 0.08), glowMat);
+    crossV.position.y = 0.5;
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.08), glowMat);
+    crossH.position.y = 0.52;
+    headGroup.add(crownBase, crossV, crossH);
+
+    // شمشیر پهن سلطنتی که از قبضه به سمت بالا و بیرون امتداد دارد
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.04, 0.42, 10), darkSteelMat);
+    const pommel = new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 0), trimMat);
+    pommel.position.y = -0.22;
+    const crossguard = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.11, 0.16), trimMat);
+    crossguard.position.y = 0.22;
+    const guardGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), glowMat);
+    guardGem.position.y = 0.22;
+    const greatBlade = new THREE.Mesh(createSharpBladeGeometry(1.95, 0.38, 0.48), bladeMat);
+    greatBlade.position.y = 0.26;
+    weaponPivot.add(grip, pommel, crossguard, guardGem, greatBlade);
+
+    // سپر سلطنتی در دست چپ
+    const royalShield = new THREE.Mesh(new THREE.OctahedronGeometry(0.52, 1), armorMat);
+    royalShield.scale.set(0.9, 1.35, 0.22);
+    const rCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), glowMat);
+    rCore.position.z = 0.12;
+    shieldPivot.add(royalShield, rCore);
+  }
+
+  // گارد ایستادن طبیعی (سلاح همیشه رو به بالا و جلو، کاملاً بیرون از بدن!)
+  const baseStance = {
+    torsoRotY: -0.18,
+    armRX: -0.45, // دست راست کمی جلو
+    armRZ: 0.28,  // دست راست باز به سمت بیرون بدن
+    armLX: -0.4,  // دست چپ جلو برای گارد سپر
+    armLZ: -0.25, // دست چپ باز به سمت بیرون بدن
+    wepX: 0.35,   // زاویه شمشیر رو به بالا و جلو (هرگز به سمت شکم یا سینه نمی‌رود!)
+    wepZ: -0.15
+  };
+
+  armR.rotation.set(baseStance.armRX, 0, baseStance.armRZ);
+  armL.rotation.set(baseStance.armLX, 0, baseStance.armLZ);
+  weaponPivot.rotation.set(baseStance.wepX, 0, baseStance.wepZ);
+
+  root.userData = {
+    bodyPivot, torsoPivot, headGroup, capePivot,
+    legL, legR, armL, armR, weaponPivot, shieldPivot,
+    baseStance, walkCycle: Math.random() * 10
+  };
+
+  return root;
+}
+
+// ==========================================
+// 8. وضعیت بازی، تگ‌های نوار خون و قوانین کامل شطرنج (شامل کیش، مات و پین)
+// ==========================================
+let board = [];
+let turn = 'w';
+let selectedPiece = null;
+let legalMoves = [];
+let cameraMode = 'tps';
+let camYaw = 0;
+let camPitch = 0.38;
+let isCombatAnimating = false;
+let comboStep = 0;
+let gameOver = false;
+const keys = { w: false, a: false, s: false, d: false };
+let jumpVelocity = 0;
+let isJumping = false;
+
+const INITIAL_LAYOUT = [
+  ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+  ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+  ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r']
+];
+
+function createPieceHUD(piece) {
+  const el = document.createElement('div');
+  el.className = 'piece-hud';
+  const colorHex = piece.color === 'w' ? '#38bdf8' : '#f43f5e';
+  el.innerHTML = `
+    <div class="piece-lvl" style="color:${colorHex}">Lv.${piece.level}</div>
+    <div class="piece-hp-bg">
+      <div class="piece-hp-fill" style="width:100%; background:${colorHex}"></div>
+    </div>
+  `;
+  labelsContainer.appendChild(el);
+  piece.hudEl = el;
+  piece.hpFillEl = el.querySelector('.piece-hp-fill');
+}
+
+function updatePieceHUDElement(piece) {
+  if (!piece || !piece.hudEl) return;
+  const pct = Math.max(0, (piece.hp / piece.maxHp) * 100);
+  piece.hpFillEl.style.width = pct + '%';
+  if (pct < 35) piece.hpFillEl.style.background = '#f59e0b';
+}
+
+function spawnDamagePopup(worldPos, text, color = '#ff2a55') {
+  const proj = worldPos.clone();
+  proj.y += 2.3;
+  proj.project(camera);
+  const x = (proj.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-(proj.y * 0.5) + 0.5) * window.innerHeight;
+  const pop = document.createElement('div');
+  pop.className = 'dmg-popup';
+  pop.style.left = x + 'px';
+  pop.style.top = y + 'px';
+  pop.style.color = color;
+  pop.textContent = text;
+  labelsContainer.appendChild(pop);
+  setTimeout(() => pop.remove(), 850);
+}
+
+function initGame() {
+  board.forEach(row => row.forEach(p => {
+    if (p) {
+      if (p.mesh) scene.remove(p.mesh);
+      if (p.hudEl) p.hudEl.remove();
+    }
+  }));
+  board = Array.from({ length: 8 }, () => Array(8).fill(null));
+  turn = 'w';
+  selectedPiece = null;
+  legalMoves = [];
+  isCombatAnimating = false;
+  gameOver = false;
+  clearHighlights();
+  document.getElementById('combat-hud').classList.remove('show');
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const type = INITIAL_LAYOUT[r][c];
+      if (type) {
+        const color = r < 2 ? 'b' : 'w';
+        const stats = PIECE_STATS[type];
+        const mesh = createWarriorMesh(type, color);
+        const pos = boardToWorld(r, c);
+        mesh.position.set(pos.x, 0, pos.z);
+        mesh.rotation.y = color === 'w' ? Math.PI : 0;
+        scene.add(mesh);
+        const pieceObj = {
+          type, color, r, c, mesh,
+          level: stats.level, maxHp: stats.maxHp, hp: stats.maxHp, dmg: stats.dmg
+        };
+        createPieceHUD(pieceObj);
+        board[r][c] = pieceObj;
+      }
+    }
+  }
+  updateAllUIText();
+}
+
+// ==========================================
+// 9. موتور قوانین شطرنج: حرکات شبه‌قانونی + بررسی کیش شدن شاه (Pin / Check / Checkmate)
+// ==========================================
+function inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+
+// حرکات خام هر مهره روی یک ماتریس دلخواه (برای شبیه‌سازی کیش)
+function getPseudoMovesOnBoard(piece, r, c, bState) {
+  const moves = [];
+  const { type, color } = piece;
+  const dir = color === 'w' ? -1 : 1;
+
+  if (type === 'p') {
+    if (inBounds(r + dir, c) && !bState[r + dir][c]) {
+      moves.push({ r: r + dir, c, attack: false });
+      const startRow = color === 'w' ? 6 : 1;
+      if (r === startRow && !bState[r + dir * 2][c]) moves.push({ r: r + dir * 2, c, attack: false });
+    }
+    [-1, 1].forEach(dc => {
+      if (inBounds(r + dir, c + dc)) {
+        const target = bState[r + dir][c + dc];
+        if (target && target.color !== color) moves.push({ r: r + dir, c: c + dc, attack: true });
+      }
+    });
+  } else if (type === 'n') {
+    [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr, dc]) => {
+      const nr = r + dr, nc = c + dc;
+      if (inBounds(nr, nc)) {
+        const t = bState[nr][nc];
+        if (!t) moves.push({ r: nr, c: nc, attack: false });
+        else if (t.color !== color) moves.push({ r: nr, c: nc, attack: true });
+      }
+    });
+  } else if (type === 'k') {
+    [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr, dc]) => {
+      const nr = r + dr, nc = c + dc;
+      if (inBounds(nr, nc)) {
+        const t = bState[nr][nc];
+        if (!t) moves.push({ r: nr, c: nc, attack: false });
+        else if (t.color !== color) moves.push({ r: nr, c: nc, attack: true });
+      }
+    });
+  } else {
+    const dirs = [];
+    if (type === 'r' || type === 'q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+    if (type === 'b' || type === 'q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+    dirs.forEach(([dr, dc]) => {
+      let nr = r + dr, nc = c + dc;
+      while (inBounds(nr, nc)) {
+        const t = bState[nr][nc];
+        if (!t) moves.push({ r: nr, c: nc, attack: false });
+        else {
+          if (t.color !== color) moves.push({ r: nr, c: nc, attack: true });
+          break;
+        }
+        nr += dr; nc += dc;
+      }
+    });
+  }
+  return moves;
+}
+
+// بررسی اینکه آیا شاهِ رنگ مشخص در وضعیت فعلی کیش است یا نه
+function isKingInCheck(color, bState = board) {
+  let kingR = -1, kingC = -1;
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = bState[r][c];
+      if (p && p.color === color && p.type === 'k') {
+        kingR = r; kingC = c; break;
+      }
+    }
+  }
+  if (kingR === -1) return true;
+
+  const enemyColor = color === 'w' ? 'b' : 'w';
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = bState[r][c];
+      if (p && p.color === enemyColor) {
+        const pseudo = getPseudoMovesOnBoard(p, r, c, bState);
+        if (pseudo.some(m => m.r === kingR && m.c === kingC)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// دریافت حرکات ۱۰۰٪ قانونی شطرنج (حذف حرکاتی که باعث کیش شدن شاه خودی می‌شوند + ممنوعیت زدن مستقیم شاه دشمن)
+function getLegalMoves(piece) {
+  const pseudo = getPseudoMovesOnBoard(piece, piece.r, piece.c, board);
+  const valid = [];
+
+  for (const m of pseudo) {
+    const target = board[m.r][m.c];
+    // قانون ۱: شاه هرگز مستقیم زده نمی‌شود
+    if (target && target.type === 'k') continue;
+
+    // شبیه‌سازی حرکت روی کپی صفحه برای بررسی کیش نشدن شاه خودی (Pin / Check)
+    const simBoard = board.map(row => row.slice());
+    simBoard[m.r][m.c] = piece;
+    simBoard[piece.r][piece.c] = null;
+
+    if (!isKingInCheck(piece.color, simBoard)) {
+      valid.push(m);
+    }
+  }
+  return valid;
+}
+
+function hasAnyLegalMoves(color) {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.color === color && getLegalMoves(p).length > 0) return true;
+    }
+  }
+  return false;
+}
+
+function checkGameEndState() {
+  const inCheck = isKingInCheck(turn, board);
+  const anyMoves = hasAnyLegalMoves(turn);
+
+  if (!anyMoves) {
+    gameOver = true;
+    if (inCheck) {
+      const msg = turn === 'w' ? t('checkmateLoss') : t('checkmateWin');
+      showToast(msg, 'combat');
+      sfx.finisherKill();
+    } else {
+      showToast(t('stalemate'), 'error');
+    }
+    return true;
+  }
+  if (inCheck) {
+    showToast(t('checkToast'), 'error');
+    sfx.error();
+  }
+  return false;
+}
+
+function showHighlights(moves, originR, originC) {
+  clearHighlights();
+  highlightMeshes[originR][originC].material.color.setHex(0x38bdf8);
+  highlightMeshes[originR][originC].material.opacity = 0.5;
+  moves.forEach(m => {
+    const mesh = highlightMeshes[m.r][m.c];
+    mesh.material.color.setHex(m.attack ? 0xf43f5e : 0x10b981);
+    mesh.material.opacity = m.attack ? 0.68 : 0.4;
+  });
+}
+
+function clearHighlights() {
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++)
+      highlightMeshes[r][c].material.opacity = 0;
+  targetLockRing.visible = false;
+}
+
+// ==========================================
+// 10. انتخاب مهره، حرکت آزادانه در مسیر مجاز و قفل هدف قانونی شطرنج
+// ==========================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function selectPiece(piece) {
+  if (isCombatAnimating || gameOver || turn !== 'w' || piece.color !== 'w') return;
+  const moves = getLegalMoves(piece);
+  if (moves.length === 0) {
+    sfx.error();
+    showToast(t('noMovesErr'), 'error');
+    return;
+  }
+
+  if (selectedPiece && selectedPiece !== piece) returnPieceToStart(false);
+
+  selectedPiece = piece;
+  legalMoves = moves;
+  camYaw = Math.PI;
+  camPitch = 0.34;
+  sfx.select();
+  showHighlights(legalMoves, piece.r, piece.c);
+
+  document.getElementById('selected-info').textContent =
+    t('selectedFormat')(getPieceName(piece.type), piece.level, piece.hp, piece.maxHp, piece.dmg);
+  document.getElementById('btn-cancel').style.display = 'inline-block';
+  updateCameraUI();
+  showToast(t('selectToast')(getPieceName(piece.type), piece.level));
+}
+
+function returnPieceToStart(playSound = true) {
+  if (!selectedPiece) return;
+  const startPos = boardToWorld(selectedPiece.r, selectedPiece.c);
+  selectedPiece.mesh.position.set(startPos.x, 0, startPos.z);
+  selectedPiece.mesh.rotation.y = Math.PI;
+  resetWarriorPose(selectedPiece);
+  if (playSound) {
+    sfx.error();
+    showToast(t('returnToast'), 'error');
+  }
+  selectedPiece = null;
+  legalMoves = [];
+  clearHighlights();
+  document.getElementById('btn-cancel').style.display = 'none';
+  document.getElementById('action-prompt').classList.remove('show', 'attack');
+  document.getElementById('combat-hud').classList.remove('show');
+  document.getElementById('helmet-overlay').classList.remove('active');
+  document.getElementById('crosshair').classList.remove('active', 'attack-ready');
+  document.getElementById('selected-info').textContent = t('selectHint');
+}
+
+function resetWarriorPose(piece) {
+  if (!piece || !piece.mesh) return;
+  const u = piece.mesh.userData;
+  const s = u.baseStance;
+  u.legL.rotation.x = 0;
+  u.legR.rotation.x = 0;
+  u.armL.rotation.set(s.armLX, 0, s.armLZ);
+  u.armR.rotation.set(s.armRX, 0, s.armRZ);
+  u.torsoPivot.rotation.set(0, s.torsoRotY, 0);
+  u.weaponPivot.rotation.set(s.wepX, 0, s.wepZ);
+}
+
+// فقط دشمنانی که در لیست حرکات قانونی شطرنج (legalMoves با attack: true) هستند قابل ضربه زدن می‌باشند!
+function findNearestEnemyStatus() {
+  if (!selectedPiece) return { legalTarget: null, illegalNearby: null };
+  let bestLegal = null;
+  let bestLegalDist = 4.6;
+  let nearbyIllegal = null;
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.color !== selectedPiece.color) {
+        const dx = p.mesh.position.x - selectedPiece.mesh.position.x;
+        const dz = p.mesh.position.z - selectedPiece.mesh.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        const isLegalAttack = legalMoves.some(m => m.r === r && m.c === c && m.attack);
+        if (isLegalAttack && dist < bestLegalDist) {
+          bestLegalDist = dist;
+          bestLegal = p;
+        } else if (!isLegalAttack && dist < 3.6) {
+          nearbyIllegal = p;
+        }
+      }
+    }
+  }
+  return { legalTarget: bestLegal, illegalNearby: nearbyIllegal };
+}
+
+function isSquareAllowed(r, c) {
+  if (!selectedPiece) return false;
+  if (r === selectedPiece.r && c === selectedPiece.c) return true;
+  if (legalMoves.some(m => m.r === r && m.c === c)) return true;
+
+  // اجازه عبور از خانه‌های میانی در مسیر حرکت به سمت خانه مقصد قانونی
+  for (const m of legalMoves) {
+    const dr = m.r - selectedPiece.r;
+    const dc = m.c - selectedPiece.c;
+    const steps = Math.max(Math.abs(dr), Math.abs(dc));
+    for (let s = 1; s <= steps; s++) {
+      const ir = Math.round(selectedPiece.r + (dr * s) / steps);
+      const ic = Math.round(selectedPiece.c + (dc * s) / steps);
+      if (ir === r && ic === c) return true;
+    }
+  }
+  return false;
+}
+
+function updateCombatBanner(attacker, defender) {
+  const hud = document.getElementById('combat-hud');
+  if (!attacker || !defender) {
+    hud.classList.remove('show');
+    return;
+  }
+  hud.classList.add('show');
+  document.getElementById('atk-name').textContent = getPieceName(attacker.type);
+  document.getElementById('atk-lvl').textContent = 'Lv.' + attacker.level;
+  document.getElementById('atk-hp').style.width = ((attacker.hp / attacker.maxHp) * 100) + '%';
+
+  document.getElementById('def-name').textContent = getPieceName(defender.type);
+  document.getElementById('def-lvl').textContent = 'Lv.' + defender.level;
+  const defPct = Math.max(0, (defender.hp / defender.maxHp) * 100);
+  document.getElementById('def-hp').style.width = defPct + '%';
+  setTimeout(() => {
+    document.getElementById('def-hp-trail').style.width = defPct + '%';
+  }, 90);
+}
+
+let stepTimer = 0;
+
+function updatePlayerMovement(dt, elapsed) {
+  if (!selectedPiece || isCombatAnimating || gameOver || turn !== 'w') return;
+
+  const mesh = selectedPiece.mesh;
+  const u = mesh.userData;
+  const speed = 7.6;
+  let moveX = 0, moveZ = 0;
+
+  const forwardX = -Math.sin(camYaw);
+  const forwardZ = -Math.cos(camYaw);
+  const rightX = Math.cos(camYaw);
+  const rightZ = -Math.sin(camYaw);
+
+  if (keys.w) { moveX += forwardX; moveZ += forwardZ; }
+  if (keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
+  if (keys.d) { moveX += rightX; moveZ += rightZ; }
+  if (keys.a) { moveX -= rightX; moveZ -= rightZ; }
+
+  const isMoving = (moveX !== 0 || moveZ !== 0);
+
+  if (isMoving) {
+    const len = Math.hypot(moveX, moveZ);
+    moveX = (moveX / len) * speed * dt;
+    moveZ = (moveZ / len) * speed * dt;
+
+    const nextX = mesh.position.x + moveX;
+    const nextZ = mesh.position.z + moveZ;
+    const bPos = worldToBoard(nextX, nextZ);
+
+    if (!inBounds(bPos.r, bPos.c)) {
+      sfx.error();
+      showToast(t('outOfBoundsErr'), 'error');
+      const startW = boardToWorld(selectedPiece.r, selectedPiece.c);
+      mesh.position.set(startW.x, 0, startW.z);
+      return;
+    }
+
+    const occupant = board[bPos.r][bPos.c];
+    if (occupant && occupant !== selectedPiece) {
+      const isLegalEnemyTarget = legalMoves.some(m => m.r === bPos.r && m.c === bPos.c && m.attack);
+      if (occupant.color === selectedPiece.color && !isJumping) {
+        if (selectedPiece.type === 'n') {
+          sfx.error();
+          showToast(t('blockedJumpErr'), 'error');
+          const startW = boardToWorld(selectedPiece.r, selectedPiece.c);
+          mesh.position.set(startW.x, 0, startW.z);
+          return;
+        }
+      }
+      // حفظ فاصله رزمی مناسب در برابر دشمن تا سلاح هرگز داخل بدن دشمن نرود
+      if (isLegalEnemyTarget) {
+        const distToEnemy = Math.hypot(occupant.mesh.position.x - nextX, occupant.mesh.position.z - nextZ);
+        if (distToEnemy < 1.85 && !isJumping) {
+          moveX = 0; moveZ = 0;
+        }
+      }
+    }
+
+    if (!isSquareAllowed(bPos.r, bPos.c) && !isJumping) {
+      sfx.error();
+      showToast(t('illegalTileErr'), 'error');
+      const startW = boardToWorld(selectedPiece.r, selectedPiece.c);
+      mesh.position.set(startW.x, 0, startW.z);
+      return;
+    }
+
+    mesh.position.x += moveX;
+    mesh.position.z += moveZ;
+
+    if (moveX !== 0 || moveZ !== 0) {
+      const targetAngle = Math.atan2(moveX, moveZ);
+      mesh.rotation.y = targetAngle;
+    }
+
+    u.walkCycle += dt * 15;
+    u.legL.rotation.x = Math.sin(u.walkCycle) * 0.72;
+    u.legR.rotation.x = -Math.sin(u.walkCycle) * 0.72;
+    u.armL.rotation.x = u.baseStance.armLX - Math.sin(u.walkCycle) * 0.35;
+    u.armR.rotation.x = u.baseStance.armRX + Math.sin(u.walkCycle) * 0.35;
+    u.torsoPivot.rotation.y = Math.sin(u.walkCycle) * 0.14;
+    u.bodyPivot.position.y = (selectedPiece.type === 'n' ? 0.45 : 0) + Math.abs(Math.sin(u.walkCycle * 2)) * 0.09;
+
+    stepTimer += dt;
+    if (stepTimer > 0.24 && !isJumping) {
+      sfx.step();
+      stepTimer = 0;
+    }
+  } else {
+    // حالت ایستاده رزمی طبیعی (سلاح بیرون از بدن)
+    const s = u.baseStance;
+    const breath = Math.sin(elapsed * 3.2) * 0.035;
+    u.legL.rotation.x *= 0.82;
+    u.legR.rotation.x *= 0.82;
+    u.armL.rotation.x = THREE.MathUtils.lerp(u.armL.rotation.x, s.armLX + breath, 0.15);
+    u.armR.rotation.x = THREE.MathUtils.lerp(u.armR.rotation.x, s.armRX - breath, 0.15);
+    u.torsoPivot.rotation.y = THREE.MathUtils.lerp(u.torsoPivot.rotation.y, s.torsoRotY, 0.15);
+  }
+
+  if (isJumping) {
+    mesh.position.y += jumpVelocity * dt;
+    jumpVelocity -= 25 * dt;
+    if (mesh.position.y <= 0) {
+      mesh.position.y = 0;
+      isJumping = false;
+      jumpVelocity = 0;
+      sfx.step();
+    }
+  }
+
+  // بررسی وضعیت دشمن نزدیک (قانونی در برابر غیرقانونی)
+  const { legalTarget, illegalNearby } = findNearestEnemyStatus();
+  const promptEl = document.getElementById('action-prompt');
+  const crosshair = document.getElementById('crosshair');
+  const curTile = worldToBoard(mesh.position.x, mesh.position.z);
+  const legalEmptyMove = legalMoves.find(m => m.r === curTile.r && m.c === curTile.c && !m.attack);
+
+  if (legalTarget) {
+    targetLockRing.visible = true;
+    targetLockRing.position.x = legalTarget.mesh.position.x;
+    targetLockRing.position.z = legalTarget.mesh.position.z;
+    targetLockRing.rotation.z += dt * 2.6;
+
+    updateCombatBanner(selectedPiece, legalTarget);
+    promptEl.textContent = t('attackPrompt')(getPieceName(legalTarget.type), legalTarget.hp, legalTarget.maxHp);
+    promptEl.className = 'show attack';
+    crosshair.classList.add('attack-ready');
+  } else {
+    targetLockRing.visible = false;
+    document.getElementById('combat-hud').classList.remove('show');
+    crosshair.classList.remove('attack-ready');
+
+    if (illegalNearby) {
+      promptEl.textContent = illegalNearby.type === 'k' ? t('kingCannotBeCaptured') : t('IllegalTargetPrompt');
+      promptEl.className = 'show';
+    } else if (legalEmptyMove) {
+      promptEl.textContent = t('confirmMovePrompt');
+      promptEl.className = 'show';
+    } else {
+      promptEl.className = '';
+    }
+  }
+}
+
+// ==========================================
+// 11. سیستم ضربه شمشیر بیرون از بدن + نوار خون + فینیشر
+// ==========================================
+function createSwordSlashArc(pos, angle, colorHex) {
+  const arcGeo = new THREE.RingGeometry(0.85, 2.05, 20, 1, -Math.PI * 0.42, Math.PI * 0.84);
+  const arcMat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+  const arc = new THREE.Mesh(arcGeo, arcMat);
+  arc.position.copy(pos);
+  arc.position.y += 1.35;
+  arc.rotation.y = angle;
+  arc.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.45;
+  scene.add(arc);
+
+  let life = 0;
+  function fadeArc() {
+    life += 0.09;
+    arc.scale.multiplyScalar(1.05);
+    arc.material.opacity = Math.max(0, 0.92 - life * 1.35);
+    if (life < 0.7) requestAnimationFrame(fadeArc);
+    else scene.remove(arc);
+  }
+  fadeArc();
+}
+
+function createHitSparks(pos, colorHex, count = 20) {
+  const particles = [];
+  const geo = new THREE.OctahedronGeometry(0.1, 0);
+  const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+  for (let i = 0; i < count; i++) {
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    p.position.y += 1.25;
+    const a = Math.random() * Math.PI * 2;
+    const s = 3 + Math.random() * 7;
+    p.userData = { vx: Math.cos(a) * s, vy: 2 + Math.random() * 5, vz: Math.sin(a) * s };
+    scene.add(p);
+    particles.push(p);
+  }
+  let elapsed = 0;
+  function tick() {
+    elapsed += 0.03;
+    particles.forEach(p => {
+      p.position.x += p.userData.vx * 0.03;
+      p.position.y += p.userData.vy * 0.03;
+      p.position.z += p.userData.vz * 0.03;
+      p.userData.vy -= 14 * 0.03;
+      p.scale.multiplyScalar(0.92);
+    });
+    if (elapsed < 0.55) requestAnimationFrame(tick);
+    else particles.forEach(p => scene.remove(p));
+  }
+  tick();
+}
+
+function triggerSwordStrike(attacker, defender, onComplete = null) {
+  if (isCombatAnimating) return;
+  isCombatAnimating = true;
+
+  const atkMesh = attacker.mesh;
+  const defMesh = defender.mesh;
+  const atkU = atkMesh.userData;
+  const defU = defMesh.userData;
+
+  const angleToDef = Math.atan2(defMesh.position.x - atkMesh.position.x, defMesh.position.z - atkMesh.position.z);
+  atkMesh.rotation.y = angleToDef;
+  defMesh.rotation.y = angleToDef + Math.PI;
+
+  const dmg = attacker.dmg;
+  const isLethal = (defender.hp - dmg) <= 0;
+  comboStep = (comboStep + 1) % 3;
+
+  sfx.swordWhoosh();
+
+  const startPos = atkMesh.position.clone();
+  const dirVec = new THREE.Vector3(Math.sin(angleToDef), 0, Math.cos(angleToDef));
+  // فاصله ایده‌آل شمشیرزنی (۱.۸۵ واحد) تا تیغه به بدن دشمن بخورد ولی کاراکترها داخل هم فرو نروند!
+  const strikeSpot = defMesh.position.clone().sub(dirVec.clone().multiplyScalar(1.85));
+
+  const duration = isLethal ? 0.65 : 0.28;
+  let tVal = 0;
+  let impactTriggered = false;
+
+  function animateStrike() {
+    tVal += 0.022 / duration;
+
+    // ۱. بالا بردن سلاح به بیرون و بالای شانه (هرگز داخل بدن نمی‌رود)
+    if (tVal < 0.35) {
+      const p = tVal / 0.35;
+      atkMesh.position.lerpVectors(startPos, strikeSpot, p * 0.75);
+      if (isLethal) atkMesh.position.y = Math.sin(p * Math.PI) * 1.15;
+
+      atkU.torsoPivot.rotation.y = -0.5 * p;
+      atkU.armR.rotation.x = -2.05 * p; // دست بالا می‌رود
+      atkU.armR.rotation.z = 0.45;      // دست کاملاً باز و بیرون از بدن
+      atkU.weaponPivot.rotation.x = 0.25; // تیغه رو به بالا/بیرون
+    }
+    // ۲. فرود آمدن تیغه شمشیر به سمت جلو روی دشمن (از بیرون بدن به سمت جلو)
+    else if (tVal < 0.68) {
+      const p = (tVal - 0.35) / 0.33;
+      atkMesh.position.lerpVectors(startPos, strikeSpot, 0.75 + p * 0.25);
+      if (isLethal) atkMesh.position.y = Math.max(0, (1 - p) * 0.7);
+
+      atkU.torsoPivot.rotation.y = -0.5 + p * 0.95;
+      atkU.armR.rotation.x = -2.05 + p * 1.65; // فرود آمدن دست تا مقابل دشمن (نه به سمت شکم خودی!)
+      atkU.armR.rotation.z = 0.35;
+      atkU.weaponPivot.rotation.x = 0.25 + p * 0.85; // تیغه افقی رو به دشمن قرار می‌گیرد
+
+      if (!impactTriggered && p > 0.25) {
+        impactTriggered = true;
+        defender.hp = Math.max(0, defender.hp - dmg);
+        updatePieceHUDElement(defender);
+        updateCombatBanner(attacker, defender);
+
+        createSwordSlashArc(atkMesh.position, angleToDef, attacker.color === 'w' ? 0x38bdf8 : 0xf43f5e);
+
+        if (isLethal) {
+          sfx.finisherKill();
+          createHitSparks(defMesh.position, 0xfbbf24, 34);
+          spawnDamagePopup(defMesh.position, `💥 -${dmg} FINISHER!`, '#fbbf24');
+          showToast(t('finisherToast')(getPieceName(attacker.type), getPieceName(defender.type)), 'combat');
+        } else {
+          sfx.metalClash();
+          createHitSparks(defMesh.position, 0xf43f5e, 16);
+          spawnDamagePopup(defMesh.position, `-${dmg}`, '#ff2a55');
+          showToast(t('hitToast')(getPieceName(defender.type), dmg, defender.hp), 'combat');
+        }
+
+        defU.torsoPivot.rotation.x = -0.45;
+        defMesh.position.add(dirVec.clone().multiplyScalar(0.28));
+      }
+    }
+    // ۳. بازگشت به گارد استاندارد
+    else if (tVal < 1.0) {
+      const p = (tVal - 0.68) / 0.32;
+      resetWarriorPose(attacker);
+      if (!isLethal) {
+        defU.torsoPivot.rotation.x = -0.45 * (1 - p);
+      } else {
+        defMesh.rotation.x = -p * (Math.PI / 2.1);
+        defMesh.position.y = -p * 0.35;
+      }
+    }
+
+    if (tVal < 1.0) {
+      requestAnimationFrame(animateStrike);
+    } else {
+      atkMesh.position.y = 0;
+      resetWarriorPose(attacker);
+      defU.torsoPivot.rotation.x = 0;
+
+      if (isLethal) {
+        const destR = defender.r;
+        const destC = defender.c;
+        scene.remove(defMesh);
+        if (defender.hudEl) defender.hudEl.remove();
+
+        board[attacker.r][attacker.c] = null;
+        attacker.r = destR;
+        attacker.c = destC;
+        board[destR][destC] = attacker;
+
+        // ارتقای سرباز به وزیر در ردیف آخر
+        if (attacker.type === 'p' && (destR === 0 || destR === 7)) {
+          scene.remove(attacker.mesh);
+          attacker.type = 'q';
+          attacker.level = 9;
+          attacker.maxHp = 280;
+          attacker.hp = 280;
+          attacker.dmg = 95;
+          attacker.mesh = createWarriorMesh('q', attacker.color);
+          scene.add(attacker.mesh);
+          if (attacker.hudEl) attacker.hudEl.remove();
+          createPieceHUD(attacker);
+        }
+
+        const finalW = boardToWorld(destR, destC);
+        attacker.mesh.position.set(finalW.x, 0, finalW.z);
+        attacker.mesh.rotation.y = attacker.color === 'w' ? Math.PI : 0;
+
+        isCombatAnimating = false;
+        if (onComplete) onComplete(true);
+        else finishPlayerTurn();
+      } else {
+        isCombatAnimating = false;
+        if (onComplete) onComplete(false);
+      }
+    }
+  }
+  animateStrike();
+}
+
+function confirmMoveToSquare(destR, destC) {
+  if (!selectedPiece || isCombatAnimating) return;
+  board[selectedPiece.r][selectedPiece.c] = null;
+  selectedPiece.r = destR;
+  selectedPiece.c = destC;
+  board[destR][destC] = selectedPiece;
+
+  if (selectedPiece.type === 'p' && destR === 0) {
+    scene.remove(selectedPiece.mesh);
+    selectedPiece.type = 'q';
+    selectedPiece.level = 9;
+    selectedPiece.maxHp = 280;
+    selectedPiece.hp = 280;
+    selectedPiece.dmg = 95;
+    selectedPiece.mesh = createWarriorMesh('q', 'w');
+    scene.add(selectedPiece.mesh);
+    if (selectedPiece.hudEl) selectedPiece.hudEl.remove();
+    createPieceHUD(selectedPiece);
+  }
+
+  const finalPos = boardToWorld(destR, destC);
+  selectedPiece.mesh.position.set(finalPos.x, 0, finalPos.z);
+  selectedPiece.mesh.rotation.y = Math.PI;
+  resetWarriorPose(selectedPiece);
+  sfx.select();
+  finishPlayerTurn();
+}
+
+function finishPlayerTurn() {
+  selectedPiece = null;
+  legalMoves = [];
+  clearHighlights();
+  document.getElementById('btn-cancel').style.display = 'none';
+  document.getElementById('action-prompt').classList.remove('show', 'attack');
+  document.getElementById('combat-hud').classList.remove('show');
+  document.getElementById('helmet-overlay').classList.remove('active');
+  document.getElementById('crosshair').classList.remove('active', 'attack-ready');
+  document.getElementById('selected-info').textContent = t('selectHint');
+
+  turn = 'b';
+  updateTurnUI();
+  if (!checkGameEndState()) {
+    setTimeout(executeAITurn, 650);
+  }
+}
+
+// ==========================================
+// 12. هوش مصنوعی ارتش سیاه (رعایت کامل قوانین شطرنج و کیش)
+// ==========================================
+function executeAITurn() {
+  if (turn !== 'b' || gameOver) return;
+  const allMoves = [];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.color === 'b') {
+        const moves = getLegalMoves(p);
+        moves.forEach(m => allMoves.push({ piece: p, move: m }));
+      }
+    }
+  }
+  if (allMoves.length === 0) {
+    checkGameEndState();
+    return;
+  }
+
+  const attacks = allMoves.filter(x => x.move.attack);
+  let chosen;
+  if (attacks.length > 0) {
+    attacks.sort((a, b) => board[b.move.r][b.move.c].level - board[a.move.r][a.move.c].level);
+    chosen = attacks[0];
+  } else {
+    chosen = allMoves[Math.floor(Math.random() * allMoves.length)];
+  }
+
+  const { piece, move } = chosen;
+  const startPos = piece.mesh.position.clone();
+  const targetPos = boardToWorld(move.r, move.c);
+  const endVec = new THREE.Vector3(targetPos.x, 0, targetPos.z);
+
+  if (move.attack) {
+    const defender = board[move.r][move.c];
+    updateCombatBanner(piece, defender);
+    triggerSwordStrike(piece, defender, (killed) => {
+      if (!killed) {
+        piece.mesh.position.copy(startPos);
+        piece.mesh.rotation.y = 0;
+        showToast(t('aiHitToast')(getPieceName(piece.type), getPieceName(defender.type), piece.dmg), 'error');
+      }
+      setTimeout(() => {
+        document.getElementById('combat-hud').classList.remove('show');
+        turn = 'w';
+        updateTurnUI();
+        checkGameEndState();
+      }, 450);
+    });
+  } else {
+    let p = 0;
+    const angle = Math.atan2(endVec.x - startPos.x, endVec.z - startPos.z);
+    piece.mesh.rotation.y = angle;
+    function walkAI() {
+      p += 0.05;
+      piece.mesh.position.lerpVectors(startPos, endVec, Math.min(1, p));
+      if (piece.type === 'n') piece.mesh.position.y = Math.sin(Math.min(1, p) * Math.PI) * 2.5;
+      const u = piece.mesh.userData;
+      u.legL.rotation.x = Math.sin(p * 18) * 0.65;
+      u.legR.rotation.x = -Math.sin(p * 18) * 0.65;
+
+      if (p < 1) requestAnimationFrame(walkAI);
+      else {
+        piece.mesh.position.set(endVec.x, 0, endVec.z);
+        piece.mesh.rotation.y = 0;
+        resetWarriorPose(piece);
+        board[piece.r][piece.c] = null;
+        piece.r = move.r; piece.c = move.c;
+        board[move.r][move.c] = piece;
+        sfx.step();
+        turn = 'w';
+        updateTurnUI();
+        checkGameEndState();
+      }
+    }
+    walkAI();
+  }
+}
+
+// ==========================================
+// 13. کنترل‌های موس، کیبورد و تغییر زبان
+// ==========================================
+let isRightDragging = false;
+let prevMouse = { x: 0, y: 0 };
+
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+window.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.glass-panel')) return;
+
+  if (e.button === 2) {
+    isRightDragging = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+    return;
+  }
+
+  if (e.button === 0) {
+    if (isCombatAnimating || gameOver || turn !== 'w') return;
+
+    // اگر در فاصله ضربه به یک دشمنِ قانونیِ شطرنج هستیم: کلیک چپ فوراً شمشیر می‌زند!
+    if (selectedPiece) {
+      const { legalTarget, illegalNearby } = findNearestEnemyStatus();
+      if (legalTarget) {
+        triggerSwordStrike(selectedPiece, legalTarget);
+        return;
+      }
+      if (illegalNearby) {
+        sfx.error();
+        showToast(illegalNearby.type === 'k' ? t('kingCannotBeCaptured') : t('IllegalTargetPrompt'), 'error');
+        return;
+      }
+    }
+
+    // انتخاب مهره خودی با کلیک روی آن
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    const meshes = [];
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (board[r][c] && board[r][c].color === 'w') meshes.push(board[r][c].mesh);
+      }
+    }
+    const hits = raycaster.intersectObjects(meshes, true);
+    if (hits.length > 0) {
+      let obj = hits[0].object;
+      while (obj.parent && obj.parent !== scene) obj = obj.parent;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (board[r][c] && board[r][c].mesh === obj) {
+            selectPiece(board[r][c]);
+            return;
+          }
+        }
+      }
+    }
+
+    isRightDragging = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+  }
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (isRightDragging) {
+    const dx = e.clientX - prevMouse.x;
+    const dy = e.clientY - prevMouse.y;
+    camYaw -= dx * 0.007;
+    camPitch = Math.max(0.08, Math.min(1.35, camPitch + dy * 0.006));
+    prevMouse = { x: e.clientX, y: e.clientY };
+  }
+});
+
+window.addEventListener('pointerup', () => { isRightDragging = false; });
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || e.key === 'ArrowUp') keys.w = true;
+  if (k === 's' || e.key === 'ArrowDown') keys.s = true;
+  if (k === 'a' || e.key === 'ArrowLeft') keys.a = true;
+  if (k === 'd' || e.key === 'ArrowRight') keys.d = true;
+
+  if (e.code === 'Space' && selectedPiece && !isJumping && !isCombatAnimating) {
+    isJumping = true;
+    jumpVelocity = selectedPiece.type === 'n' ? 12.5 : 8.2;
+    sfx.jump();
+  }
+
+  if ((k === 'f' || e.key === 'Enter') && selectedPiece && !isCombatAnimating) {
+    const curTile = worldToBoard(selectedPiece.mesh.position.x, selectedPiece.mesh.position.z);
+    const move = legalMoves.find(m => m.r === curTile.r && m.c === curTile.c && !m.attack);
+    if (move) confirmMoveToSquare(move.r, move.c);
+  }
+
+  if (k === 'v') toggleCameraMode();
+  if (e.key === 'Escape' && selectedPiece) returnPieceToStart(true);
+});
+
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || e.key === 'ArrowUp') keys.w = false;
+  if (k === 's' || e.key === 'ArrowDown') keys.s = false;
+  if (k === 'a' || e.key === 'ArrowLeft') keys.a = false;
+  if (k === 'd' || e.key === 'ArrowRight') keys.d = false;
+});
+
+function toggleCameraMode() {
+  if (cameraMode === 'tps') cameraMode = 'fps';
+  else if (cameraMode === 'fps') cameraMode = 'top';
+  else cameraMode = 'tps';
+  updateCameraUI();
+}
+
+function updateCameraUI() {
+  const btn = document.getElementById('btn-cam-toggle');
+  const helmet = document.getElementById('helmet-overlay');
+  const crosshair = document.getElementById('crosshair');
+  if (cameraMode === 'tps') {
+    btn.textContent = t('camTps');
+    helmet.classList.remove('active');
+    crosshair.classList.toggle('active', !!selectedPiece);
+  } else if (cameraMode === 'fps') {
+    btn.textContent = t('camFps');
+    helmet.classList.toggle('active', !!selectedPiece);
+    crosshair.classList.toggle('active', !!selectedPiece);
+  } else {
+    btn.textContent = t('camTop');
+    helmet.classList.remove('active');
+    crosshair.classList.remove('active');
+  }
+}
+
+function updateTurnUI() {
+  const dot = document.getElementById('turn-dot');
+  const txt = document.getElementById('turn-text');
+  const checkSuffix = isKingInCheck(turn, board) ? t('checkAlert') : '';
+  if (turn === 'w') {
+    dot.className = 'dot white';
+    txt.textContent = t('turnWhite') + checkSuffix;
+  } else {
+    dot.className = 'dot black';
+    txt.textContent = t('turnBlack') + checkSuffix;
+  }
+}
+
+function updateAllUIText() {
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = currentLang === 'fa' ? 'rtl' : 'ltr';
+  document.getElementById('ui-title').textContent = t('title');
+  document.getElementById('ui-controls').innerHTML = t('controlsHtml');
+  document.getElementById('btn-cancel').textContent = t('cancelBtn');
+  document.getElementById('btn-reset').textContent = t('resetBtn');
+  document.getElementById('ui-status').textContent = t('statusNote');
+  if (selectedPiece) {
+    document.getElementById('selected-info').textContent =
+      t('selectedFormat')(getPieceName(selectedPiece.type), selectedPiece.level, selectedPiece.hp, selectedPiece.maxHp, selectedPiece.dmg);
+  } else {
+    document.getElementById('selected-info').textContent = t('selectHint');
+  }
+  updateTurnUI();
+  updateCameraUI();
+}
+
+let toastTimeout = null;
+function showToast(msg, type = 'normal') {
+  const el = document.getElementById('toast-msg');
+  el.textContent = msg;
+  el.className = 'show ' + (type !== 'normal' ? type : '');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+document.getElementById('btn-lang').addEventListener('click', () => {
+  currentLang = currentLang === 'fa' ? 'en' : 'fa';
+  updateAllUIText();
+});
+document.getElementById('btn-cam-toggle').addEventListener('click', toggleCameraMode);
+document.getElementById('btn-cancel').addEventListener('click', () => returnPieceToStart(true));
+document.getElementById('btn-reset').addEventListener('click', () => {
+  initGame();
+  showToast(t('resetToast'));
+});
+
+// ==========================================
+// 14. حلقه اصلی رندر، دوربین و انیمیشن‌های محیط کیهانی
+// ==========================================
+const clock = new THREE.Clock();
+const smoothCamPos = new THREE.Vector3(0, 22, 26);
+const smoothLookAt = new THREE.Vector3(0, 0, 0);
+
+function updateHUDPositions() {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (!p || !p.hudEl || !p.mesh) continue;
+      if (selectedPiece === p && cameraMode === 'fps') {
+        p.hudEl.style.opacity = '0';
+        continue;
+      }
+      const worldPos = p.mesh.position.clone();
+      worldPos.y += 2.75;
+      worldPos.project(camera);
+      if (worldPos.z > 1) {
+        p.hudEl.style.opacity = '0';
+      } else {
+        const x = (worldPos.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-(worldPos.y * 0.5) + 0.5) * window.innerHeight;
+        p.hudEl.style.opacity = '1';
+        p.hudEl.style.left = x + 'px';
+        p.hudEl.style.top = y + 'px';
+      }
+    }
+  }
+}
+
+function updateCamera(dt) {
+  let desiredPos = new THREE.Vector3();
+  let desiredLook = new THREE.Vector3();
+
+  if (selectedPiece && cameraMode === 'tps') {
+    const pPos = selectedPiece.mesh.position;
+    const dist = 6.6;
+    const height = 3.2 + camPitch * 3.8;
+    desiredPos.set(
+      pPos.x + Math.sin(camYaw) * dist,
+      pPos.y + height,
+      pPos.z + Math.cos(camYaw) * dist
+    );
+    desiredLook.set(
+      pPos.x - Math.sin(camYaw) * 4,
+      pPos.y + 1.65,
+      pPos.z - Math.cos(camYaw) * 4
+    );
+  } else if (selectedPiece && cameraMode === 'fps') {
+    const pPos = selectedPiece.mesh.position;
+    desiredPos.set(
+      pPos.x - Math.sin(camYaw) * 0.35,
+      pPos.y + 2.25,
+      pPos.z - Math.cos(camYaw) * 0.35
+    );
+    desiredLook.set(
+      pPos.x - Math.sin(camYaw) * 10,
+      pPos.y + 2.1 - (camPitch - 0.35) * 6,
+      pPos.z - Math.cos(camYaw) * 10
+    );
+  } else {
+    const radius = 29;
+    desiredPos.set(
+      Math.sin(camYaw) * radius * Math.cos(camPitch),
+      Math.max(10, Math.sin(camPitch + 0.35) * 28),
+      Math.cos(camYaw) * radius * Math.cos(camPitch)
+    );
+    desiredLook.set(0, 0, 0);
+  }
+
+  smoothCamPos.lerp(desiredPos, Math.min(1, dt * 12));
+  smoothLookAt.lerp(desiredLook, Math.min(1, dt * 14));
+  camera.position.copy(smoothCamPos);
+  camera.lookAt(smoothLookAt);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsed = clock.getElapsedTime();
+
+  // چرخش سیارات، سیاه‌چاله و نوسان صخره‌های معلق زیر صفحه شطرنج
+  spaceGroup.rotation.y += 0.0003;
+  if (spaceGroup.userData.gasPlanet) spaceGroup.userData.gasPlanet.rotation.y += 0.002;
+  if (spaceGroup.userData.lavaPlanet) spaceGroup.userData.lavaPlanet.rotation.y -= 0.003;
+  if (spaceGroup.userData.blackHole) {
+    spaceGroup.userData.blackHole.userData.accretionDisk.rotation.z += 0.015;
+    spaceGroup.userData.blackHole.userData.outerDisk.rotation.z -= 0.008;
+  }
+
+  floatingRocks.forEach(r => {
+    r.position.y = r.userData.baseY + Math.sin(elapsed * r.userData.speed + r.userData.phase) * 0.55;
+    r.rotation.y += r.userData.rotSpeed;
+    r.rotation.x += r.userData.rotSpeed * 0.5;
+  });
+
+  // انیمیشن زنده تمام مهره‌ها در میدان نبرد
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.mesh) {
+        const u = p.mesh.userData;
+        const phase = elapsed * 2.8 + r + c;
+        u.capePivot.rotation.x = 0.15 + Math.sin(phase * 1.4) * 0.08;
+        if (p !== selectedPiece && !isCombatAnimating) {
+          u.torsoPivot.position.y = 0.95 + Math.sin(phase) * 0.03;
+        }
+      }
+    }
+  }
+
+  updatePlayerMovement(dt, elapsed);
+  updateCamera(dt);
+  updateHUDPositions();
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+initGame();
+animate();
+</script>
+</body>
+</html>

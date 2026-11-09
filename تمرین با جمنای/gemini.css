@@ -1,0 +1,47 @@
+body {
+  font-family: sans-serif;
+  padding: 20px;
+  background-color: #f4f4f9;
+}
+
+/* استایل عمومی جعبه‌ها */
+.box {
+  background-color: #ffffff;
+  border: 2px dashed #6200ee;
+  padding: 10px;
+  margin-bottom: 30px;
+}
+
+/* استایل آیتم‌های داخل جعبه */
+.item {
+  background-color: #03dac6;
+  color: #000;
+  padding: 15px;
+  width: 80px;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* ------------------------------------
+   روش اول: Inline-Block
+------------------------------------ */
+.inline-block-box .item {
+  display: inline-block;
+  /* برای فاصله دادن باید margin بدهیم */
+  margin-left: 10px; 
+  height: 80px;
+
+}
+
+/* ------------------------------------
+   روش دوم: Flexbox
+------------------------------------ */
+.flex-box {
+  display: flex;
+  /* با gap خیلی راحت فاصله ایجاد می‌کنیم */
+  gap: 15px; 
+  /* وسط‌چین کردن عمودی و افقی فقط با دو خط! */
+  align-items: end; 
+  justify-content: center;
+  height: 80px;
+}
